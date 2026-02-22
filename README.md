@@ -5,7 +5,6 @@ Uses speech data for classification and language modeling tasks.
 ## Directory Structure
 
 ```
-code/
 ├── main.py           # Main entry point for Parts 1, 2, and 3
 ├── main_sparse.py    # Standalone script for sparse attention (Part 3)
 ├── transformer.py    # Transformer components: Encoder, Decoder, Classifier
@@ -37,7 +36,7 @@ python -c "import nltk; nltk.download('punkt')"
 
 ## Usage
 
-Run from the `code/` directory. Data is expected in `speechesdataset/`.
+Data is expected in `speechesdataset/`.
 
 ### Part 1: Classification
 
