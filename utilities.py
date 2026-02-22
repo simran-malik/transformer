@@ -26,13 +26,13 @@ class Utilities:
 
         # Visualize and save the attention maps
         for j, attn_map in enumerate(attn_maps):
-            att_map = attn_map.squeeze(0).detach().cpu().numpy()  # Remove batch dimension and convert to NumPy array
+            selected_head = attn_map[0, 0] 
+            att_map = selected_head.detach().cpu().numpy()
+            total_prob_over_rows = torch.sum(selected_head, dim=1)
 
-            # Check if the attention probabilities sum to 1 over rows
-            total_prob_over_rows = torch.sum(attn_map[0], dim=1)
             if torch.any(total_prob_over_rows < 0.99) or torch.any(total_prob_over_rows > 1.01):
                 print("Failed normalization test: probabilities do not sum to 1.0 over rows")
-                print("Total probability over rows:", total_prob_over_rows.numpy())
+                print("Total probability over rows:", total_prob_over_rows.detach().cpu().numpy())
 
             # Create a heatmap of the attention map
             fig, ax = plt.subplots()

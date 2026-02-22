@@ -2,7 +2,13 @@ import torch
 from torch.utils.data import DataLoader
 from torch.nn.utils.rnn import pad_sequence
 import os
+import torch.optim as optim
+import torch.nn as nn
+import argparse
 
+import main_sparse
+from transformer import Classifier, Decoder, Encoder
+from utilities import Utilities
 from tokenizer import SimpleTokenizer
 from dataset import SpeechesClassificationDataset, LanguageModelingDataset
 
@@ -61,19 +67,23 @@ def collate_batch(batch):
     labels = torch.stack(labels)  
     return padded_sequences, labels
 
-def compute_classifier_accuracy(classifier, data_loader):
+def compute_classifier_accuracy(encoder, classifier, data_loader):
     """ Compute the accuracy of the classifier on the data in data_loader."""
+    encoder.eval()
     classifier.eval()
     total_correct = 0
     total_samples = 0
     with torch.no_grad():
         for X, Y in data_loader:
             X, Y = X.to(device), Y.to(device)
-            outputs = classifier(X)
+            encoder_output, _ = encoder(X)
+            classifier_input = encoder_output.mean(dim=1)
+            outputs = classifier(classifier_input)
             _, predicted = torch.max(outputs.data, 1)
             total_correct += (predicted == Y).sum().item()
             total_samples += Y.size(0)
         accuracy = (100 * total_correct / total_samples)
+        encoder.train()
         classifier.train()
         return accuracy
 
@@ -84,9 +94,10 @@ def compute_perplexity(decoderLMmodel, data_loader, eval_iters=100):
     """
     decoderLMmodel.eval()
     losses= []
+    total_loss = 0
     for X, Y in data_loader:
         X, Y = X.to(device), Y.to(device)
-        loss = decoderLMmodel(X, Y) # your model should be computing the cross entropy loss
+        _, loss = decoderLMmodel(X, Y) # your model should be computing the cross entropy loss
         losses.append(loss.item())
         total_loss += loss.item()
         if len(losses) >= eval_iters: break
@@ -100,37 +111,162 @@ def compute_perplexity(decoderLMmodel, data_loader, eval_iters=100):
     return perplexity
 
 def main():
+    parser = argparse.ArgumentParser(description='Transformer Assignment')
+    parser.add_argument('--task', type=str, default='cls', help='Task to run: cls, lm, or p3')
+    args = parser.parse_args()
 
-    print("Loading data and creating tokenizer ...")
+    print("\nLoading data and creating tokenizer ...")
     texts = load_texts('speechesdataset')
     tokenizer = SimpleTokenizer(' '.join(texts)) # create a tokenizer from the data
     print("Vocabulary size is", tokenizer.vocab_size)
 
-    train_CLS_dataset = SpeechesClassificationDataset(tokenizer, "speechesdataset/train_CLS.tsv")
-    train_CLS_loader = DataLoader(train_CLS_dataset, batch_size=batch_size,collate_fn=collate_batch,shuffle=True)
+    if args.task == 'part1':
+        print("Running Part 1: Classification")
 
-  
-    inputfile = "speechesdataset/train_LM.txt"
-    with open(inputfile, 'r', encoding='utf-8') as f:
-        lmtrainText = f.read()
-    train_LM_dataset = LanguageModelingDataset(tokenizer, lmtrainText,  block_size)
-    train_LM_loader = DataLoader(train_LM_dataset, batch_size=batch_size, shuffle=True)
+        train_CLS_dataset = SpeechesClassificationDataset(tokenizer, "speechesdataset/train_CLS.tsv")
+        train_CLS_loader = DataLoader(train_CLS_dataset, batch_size=batch_size,collate_fn=collate_batch,shuffle=True)
+        test_CLS_dataset = SpeechesClassificationDataset(tokenizer, "speechesdataset/test_CLS.tsv")
+        test_CLS_loader = DataLoader(test_CLS_dataset, batch_size=batch_size,collate_fn=collate_batch,shuffle=True)
+        
+        encoder = Encoder(tokenizer.vocab_size, block_size, n_embd, n_layer, n_head)
+        classifier = Classifier(n_input, n_hidden, n_output)
+        total_params = sum(p.numel() for p in encoder.parameters()) + sum(p.numel() for p in classifier.parameters())
+        print(f"Total parameters of encoder + classifier: {total_params}")
 
-     # for the classification  task, you will train for a fixed number of epochs like this:
+        print("\nPRE TRAINING: Running Attention Sanity Check")
+        utils = Utilities(tokenizer, encoder)
+        test_sentence = "That's how progress happens -- in societies and in our own lives."
+        utils.sanity_check(test_sentence, block_size)
+    
+        # Training encoder + classifier for predicting the politician:
+        encoder.to(device)
+        classifier.to(device)
+        # Loss function for classification task
+        loss_function = nn.CrossEntropyLoss()
+        # Optimizer with all parameters to be trained together
+        optimizer = optim.Adam(
+            list(encoder.parameters()) + list(classifier.parameters()), 
+            lr=learning_rate
+        )
 
-    for epoch in range(epochs_CLS):
-        for xb, yb in train_CLS_loader:
+        for epoch in range(epochs_CLS):
+            encoder.train()
+            classifier.train()
+            total_loss = 0
+
+            for xb, yb in train_CLS_loader:
+                xb, yb = xb.to(device), yb.to(device)
+
+                # FORWARD PASS
+                # Get sequence embeddings from encoder
+                # Shape: (batch_size, block_size, n_embd)
+                encoder_output, _ = encoder(xb)
+                # Average across the sequence dimension
+                # Shape: (batch_size, n_embd)
+                classifier_input = encoder_output.mean(dim=1) # Shape: (B, C)
+                # 3. Predict politician
+                # Shape: (batch_size, n_output=3)
+                classifier_output = classifier(classifier_input)
+
+                # LOSS CALCULATION
+                loss = loss_function(classifier_output, yb)
+
+                # BACKPROPAGATION
+                # Clear previous gradients
+                optimizer.zero_grad() 
+                # Compute gradients via chain rule
+                loss.backward() 
+                # Update all weights in encoder & classifier
+                optimizer.step() 
+
+                # LOGGING METRICS
+                total_loss += loss.item()
+
+            avg_loss = total_loss / len(train_CLS_loader)
+            accuracy = compute_classifier_accuracy(encoder, classifier, train_CLS_loader)
+
+            print(f"Epoch {epoch+1:02d} | Epoch Loss: {avg_loss:.4f} | Epoch Acc: {accuracy:.2f}%")
+
+        print(f"Final Test Accuracy: {compute_classifier_accuracy(encoder, classifier, test_CLS_loader):.2f}%")
+
+        print("\nPOST TRAINING: Running Attention Sanity Check")
+        utils = Utilities(tokenizer, encoder)
+        test_sentence = "That's how progress happens -- in societies and in our own lives."
+        utils.sanity_check(test_sentence, block_size)
+
+    elif args.task == 'part2':
+        print("Running Part 2: Language Modeling")
+
+        inputfile = "speechesdataset/train_LM.txt"
+        obamatestfile = "speechesdataset/test_LM_obama.txt"
+        wbushtestfile = "speechesdataset/test_LM_wbush.txt"
+        hbushtestfile = "speechesdataset/test_LM_hbush.txt"
+
+        with open(inputfile, 'r', encoding='utf-8') as f:
+            lmtrainText = f.read()
+        with open(obamatestfile, 'r', encoding='utf-8') as f:
+            obamatestdata = f.read()
+        with open(wbushtestfile, 'r', encoding='utf-8') as f:
+            wbushtestdata = f.read()
+        with open(hbushtestfile, 'r', encoding='utf-8') as f:
+            hbushtestdata = f.read()
+
+        train_LM_dataset = LanguageModelingDataset(tokenizer, lmtrainText,  block_size)
+        train_LM_loader = DataLoader(train_LM_dataset, batch_size=batch_size, shuffle=True)
+        test_obama_dataset = LanguageModelingDataset(tokenizer, obamatestdata,  block_size)
+        test_obama_loader = DataLoader(test_obama_dataset, batch_size=batch_size, shuffle=True)
+        test_wbush_dataset = LanguageModelingDataset(tokenizer, wbushtestdata,  block_size)
+        test_wbush_loader = DataLoader(test_wbush_dataset, batch_size=batch_size, shuffle=True)
+        test_hbush_dataset = LanguageModelingDataset(tokenizer, hbushtestdata,  block_size)
+        test_hbush_loader = DataLoader(test_hbush_dataset, batch_size=batch_size, shuffle=True)
+
+        decoder = Decoder(tokenizer.vocab_size, block_size, n_embd, n_layer, n_head)
+        decoder.to(device)
+
+        optimizer_LM = optim.Adam(decoder.parameters(), lr=learning_rate)
+        print(f"Total parameters of Decoder: {sum(p.numel() for p in decoder.parameters())}")
+
+        print("\nPRE TRAINING: Running Attention Sanity Check")
+        utils = Utilities(tokenizer, decoder)
+        test_sentence = "That's how progress happens -- in societies and in our own lives."
+        utils.sanity_check(test_sentence, block_size)
+
+        # Training Decoder
+        decoder.train()
+        for i, (xb, yb) in enumerate(train_LM_loader):
+            if i >= max_iters:
+                break
             xb, yb = xb.to(device), yb.to(device)
 
-            # CLS training code here
+            # Forward pass
+            logits, loss = decoder(xb, yb)
 
+            # Backpropagation
+            optimizer_LM.zero_grad()
+            loss.backward()
+            optimizer_LM.step()
 
-    # for the language modeling task, you will iterate over the training data for a fixed number of iterations like this:
-    for i, (xb, yb) in enumerate(train_LM_loader):
-        if i >= max_iters:
-            break
-        xb, yb = xb.to(device), yb.to(device)
-        # LM training code here
+            # Periodically evaluate perplexity
+            if i == max_iters - 1 or (i + 1) % eval_interval == 0:
+                train_perplexity = compute_perplexity(decoder, train_LM_loader, eval_iters)
+                print(f"Iteration {i + 1:03d} | Train Loss: {loss.item():.4f} | Perplexity: {train_perplexity:.2f}")
+
+        train_perplexity = compute_perplexity(decoder, train_LM_loader, eval_iters)
+        obama_perplexity = compute_perplexity(decoder, test_obama_loader, eval_iters)
+        wbush_perplexity = compute_perplexity(decoder, test_wbush_loader, eval_iters)
+        hbush_perplexity = compute_perplexity(decoder, test_hbush_loader, eval_iters)
+
+        print(f"Obama: Test Perplexity: {obama_perplexity:.2f}")
+        print(f"W Bush: Test Perplexity: {wbush_perplexity:.2f}")
+        print(f"H Bush: Test Perplexity: {hbush_perplexity:.2f}")
+
+        print("\nPOST TRAINING: Running Attention Sanity Check")
+        utils = Utilities(tokenizer, decoder)
+        test_sentence = "That's how progress happens -- in societies and in our own lives."
+        utils.sanity_check(test_sentence, block_size)
+
+    elif args.task == "part3":
+        main_sparse.main()
 
 if __name__ == "__main__":
     main()
