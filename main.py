@@ -134,7 +134,7 @@ def main():
         print(f"Total parameters of encoder + classifier: {total_params}")
 
         print("\nPRE TRAINING: Running Attention Sanity Check")
-        utils = Utilities(tokenizer, encoder)
+        utils = Utilities(tokenizer, encoder, "encoder_pre_training")
         test_sentence = "That's how progress happens -- in societies and in our own lives."
         utils.sanity_check(test_sentence, block_size)
     
@@ -190,7 +190,7 @@ def main():
         print(f"Final Test Accuracy: {compute_classifier_accuracy(encoder, classifier, test_CLS_loader):.2f}%")
 
         print("\nPOST TRAINING: Running Attention Sanity Check")
-        utils = Utilities(tokenizer, encoder)
+        utils = Utilities(tokenizer, encoder, "encoder_post_training")
         test_sentence = "That's how progress happens -- in societies and in our own lives."
         utils.sanity_check(test_sentence, block_size)
 
@@ -227,7 +227,7 @@ def main():
         print(f"Total parameters of Decoder: {sum(p.numel() for p in decoder.parameters())}")
 
         print("\nPRE TRAINING: Running Attention Sanity Check")
-        utils = Utilities(tokenizer, decoder)
+        utils = Utilities(tokenizer, decoder, "decoder_pre_training")
         test_sentence = "That's how progress happens -- in societies and in our own lives."
         utils.sanity_check(test_sentence, block_size)
 
@@ -261,7 +261,7 @@ def main():
         print(f"H Bush: Test Perplexity: {hbush_perplexity:.2f}")
 
         print("\nPOST TRAINING: Running Attention Sanity Check")
-        utils = Utilities(tokenizer, decoder)
+        utils = Utilities(tokenizer, decoder, "decoder_post_training")
         test_sentence = "That's how progress happens -- in societies and in our own lives."
         utils.sanity_check(test_sentence, block_size)
 

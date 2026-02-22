@@ -3,9 +3,10 @@ import matplotlib.pyplot as plt
 import torch
 
 class Utilities:
-    def __init__(self, tokenizer, model):
+    def __init__(self, tokenizer, model, plot_name_suffix):
         self.tokenizer = tokenizer
         self.model = model
+        self.plot_name_suffix = plot_name_suffix
 
     def sanity_check(self, sentence, block_size):
         # Encode the sentence using the tokenizer
@@ -42,7 +43,7 @@ class Utilities:
             plt.title(f"Attention Map {j + 1}")
             
             # Save the plot
-            plt.savefig(f"attention_map_{j + 1}.png")
+            plt.savefig(f"attention_map_{j + 1}_{self.plot_name_suffix}.png")
             
             # Show the plot
             plt.show()
