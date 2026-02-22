@@ -1,14 +1,18 @@
 
 import matplotlib.pyplot as plt
 import torch
+import os
 
 class Utilities:
-    def __init__(self, tokenizer, model, plot_name_suffix):
+    def __init__(self, tokenizer, model, directory, plot_name_suffix):
         self.tokenizer = tokenizer
         self.model = model
         self.plot_name_suffix = plot_name_suffix
+        self.directory = directory
 
     def sanity_check(self, sentence, block_size):
+        os.makedirs(f"{self.directory}", exist_ok=True)
+
         # Encode the sentence using the tokenizer
         wordids = self.tokenizer.encode(sentence)
 
@@ -43,7 +47,7 @@ class Utilities:
             plt.title(f"Attention Map {j + 1}")
             
             # Save the plot
-            plt.savefig(f"attention_map_{j + 1}_{self.plot_name_suffix}.png")
+            plt.savefig(f"{self.directory}/attention_map_{j + 1}_{self.plot_name_suffix}.png")
             
             # Show the plot
             plt.show()

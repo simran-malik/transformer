@@ -128,7 +128,7 @@ def main():
     print(f"Total parameters of sparse encoder + classifier: {total_params}")
 
     print("\nPRE TRAINING: Running Attention Sanity Check")
-    utils = Utilities(tokenizer, encoder)
+    utils = Utilities(tokenizer, encoder, "results/sparse_encoder", "sparse_encoder_pre_training")
     test_sentence = "That's how progress happens -- in societies and in our own lives."
     utils.sanity_check(test_sentence, block_size)
   
@@ -184,7 +184,7 @@ def main():
     print(f"Final Test Accuracy: {compute_classifier_accuracy(encoder, classifier, test_CLS_loader):.2f}%")
 
     print("\nPOST TRAINING: Running Attention Sanity Check")
-    utils = Utilities(tokenizer, encoder)
+    utils = Utilities(tokenizer, encoder, "results/sparse_encoder", "sparse_encoder_post_training")
     test_sentence = "That's how progress happens -- in societies and in our own lives."
     utils.sanity_check(test_sentence, block_size)
 
