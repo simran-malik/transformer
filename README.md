@@ -5,19 +5,25 @@ Uses presidential speech data for classification (3-way speaker prediction) and 
 ## Directory Structure
 
 ```
-├── main.py             # Main entry point: classify, generate, sparse
-├── transformer.py     # Encoder, Decoder, Classifier; full and causal multi-head attention
-├── sparse_attention.py # SparseEncoder with local window attention
-├── tokenizer.py       # Word-based tokenizer (NLTK)
-├── dataset.py         # SpeechesClassificationDataset, LanguageModelingDataset
-├── utilities.py       # Attention visualization and sanity checks
-└── speechesdataset/   # Data directory
-    ├── train_CLS.tsv       # Classification training (label, text)
-    ├── test_CLS.tsv        # Classification test
-    ├── train_LM.txt        # Language modeling training
-    ├── test_LM_obama.txt
-    ├── test_LM_wbush.txt
-    └── test_LM_hbush.txt
+
+src/                      # Source code
+│   ├── main.py           # Main entry point: classify, generate, sparse
+│   ├── transformer.py    # Encoder, Decoder, Classifier; full and causal multi-head attention
+│   ├── sparse_attention.py # SparseEncoder with local window attention
+│   ├── tokenizer.py      # Word-based tokenizer (NLTK)
+│   ├── dataset.py       # SpeechesClassificationDataset, LanguageModelingDataset
+│   └── utilities.py     # Attention visualization and sanity checks
+speechesdataset/      # Data directory
+│   ├── train_CLS.tsv     # Classification training (label, text)
+│   ├── test_CLS.tsv      # Classification test
+│   ├── train_LM.txt      # Language modeling training
+│   ├── test_LM_obama.txt
+│   ├── test_LM_wbush.txt
+│   └── test_LM_hbush.txt
+results/              # Output directory (created when running)
+    ├── encoder/          # Classification attention plots
+    ├── sparse_encoder/   # Sparse classification attention plots
+    └── decoder/         # Language modeling attention plots
 ```
 
 ## Dependencies
@@ -35,14 +41,15 @@ python -c "import nltk; nltk.download('punkt')"
 
 ## Usage
 
-Data is expected in `speechesdataset/`. Results are expected in `results/` .
+Run from the `src/` directory. Data is in `speechesdataset/`. Results are written to `results/`.
 
 ### Classification (`classify`)
 
 Train an encoder + classifier to predict speaker (3 classes) from speech text.
 
 ```bash
-python main.py --task classify
+cd src
+python3 main.py --task classify
 ```
 
 Produces attention sanity-check plots in `results/encoder/`.
@@ -52,7 +59,8 @@ Produces attention sanity-check plots in `results/encoder/`.
 Train a decoder for language modeling. Reports perplexity on Obama, W. Bush, and H. Bush test sets.
 
 ```bash
-python main.py --task generate
+cd src
+python3 main.py --task generate
 ```
 
 Produces attention sanity-check plots in `results/decoder/`.
@@ -62,24 +70,25 @@ Produces attention sanity-check plots in `results/decoder/`.
 Train a classification model with `SparseEncoder` (local window attention instead of full attention).
 
 ```bash
-python main.py --task sparse
+cd src
+python3 main.py --task sparse
 ```
 
-Produces attention plots in `results/encoder/` (same layout as classify; encoder is sparse).
+Produces attention plots in `results/sparse_encoder/`.
 
 ## Module Overview
 
 
-| File                  | Purpose                                                                  |
-| --------------------- | ------------------------------------------------------------------------ |
-| `transformer.py`      | `Encoder`, `Decoder`, `Classifier`; full and causal multi-head attention |
-| `sparse_attention.py` | `SparseEncoder`, `SparseMultiHeadAttention` with local window attention  |
-| `tokenizer.py`        | `SimpleTokenizer` (word-level, NLTK-based)                               |
-| `dataset.py`          | `SpeechesClassificationDataset`, `LanguageModelingDataset`               |
-| `utilities.py`        | `Utilities` for attention visualization and sanity checks                |
+| File                      | Purpose                                                                  |
+| ------------------------- | ------------------------------------------------------------------------ |
+| `src/transformer.py`      | `Encoder`, `Decoder`, `Classifier`; full and causal multi-head attention |
+| `src/sparse_attention.py` | `SparseEncoder`, `SparseMultiHeadAttention` with local window attention  |
+| `src/tokenizer.py`        | `SimpleTokenizer` (word-level, NLTK-based)                               |
+| `src/dataset.py`          | `SpeechesClassificationDataset`, `LanguageModelingDataset`               |
+| `src/utilities.py`        | `Utilities` for attention visualization and sanity checks                |
 
 
-## Hyperparameters (from `main.py`)
+## Hyperparameters (from `src/main.py`)
 
 
 | Parameter       | Value | Description                            |
