@@ -3,6 +3,10 @@ import torch
 import math
 
 class Classifier(nn.Module):
+    """
+    Two-layer feedforward classifier: Linear -> ReLU -> Linear.
+    Used to predict politician (or other class) from pooled encoder embeddings.
+    """
     def __init__(self, input_dim, hidden_dim, output_dim):
         super().__init__()
         self.input_layer = nn.Linear(input_dim, hidden_dim)
@@ -17,6 +21,10 @@ class Classifier(nn.Module):
         return input
 
 class MultiHeadAttention(nn.Module):
+    """
+    Bidirectional multi-head self-attention. Each token attends to all tokens in the sequence.
+    Used in the encoder (no causal masking).
+    """
     def __init__(self, model_dim, num_heads):
         super().__init__()
         assert model_dim % num_heads == 0, "model_dim must be divisible by num_heads"
@@ -57,6 +65,9 @@ class MultiHeadAttention(nn.Module):
         return output, weights
 
 class EncoderBlock(nn.Module):
+    """
+    Single encoder layer: LayerNorm -> MultiHeadAttention (residual) -> LayerNorm -> FeedForward (residual).
+    """
     def __init__(self, model_dim, num_heads):
         super().__init__()
         # Layer normalization after self-attention
@@ -95,6 +106,10 @@ class EncoderBlock(nn.Module):
         return output, [attention_weights]
 
 class Encoder(nn.Module):
+    """
+    Transformer encoder: token + positional embeddings, then a stack of EncoderBlocks.
+    Outputs sequence embeddings suitable for classification (e.g. after mean pooling).
+    """
     def __init__(self, vocab_size, block_size, model_dim, num_layers, num_heads):
         super().__init__()
         self.model_dim = model_dim
@@ -127,6 +142,10 @@ class Encoder(nn.Module):
         return x, attention_maps
 
 class CausalMultiHeadAttention(nn.Module):
+    """
+    Causal multi-head self-attention. Token i attends only to tokens 0..i (lower-triangular mask).
+    Used in the decoder for autoregressive language modeling.
+    """
     def __init__(self, model_dim, num_heads, block_size):
         super().__init__()
         assert model_dim % num_heads == 0, "model_dim must be divisible by num_heads"
@@ -171,6 +190,9 @@ class CausalMultiHeadAttention(nn.Module):
         return output, weights
 
 class DecoderBlock(nn.Module):
+    """
+    Single decoder layer: LayerNorm -> CausalMultiHeadAttention (residual) -> LayerNorm -> FeedForward (residual).
+    """
     def __init__(self, model_dim, num_heads, block_size):
         super().__init__()
         self.masked_attention = CausalMultiHeadAttention(model_dim, num_heads, block_size)
@@ -206,6 +228,10 @@ class DecoderBlock(nn.Module):
         return output, [attention_weights]
 
 class Decoder(nn.Module):
+    """
+    Transformer decoder for language modeling: token + positional embeddings, stacked DecoderBlocks,
+    final LayerNorm, and lm_head for next-token logits. Returns (logits, loss) when targets given.
+    """
     def __init__(self, vocab_size, block_size, model_dim, num_layers, num_heads):
         super().__init__()
         self.token_embeddings = nn.Embedding(vocab_size, model_dim)
@@ -221,7 +247,9 @@ class Decoder(nn.Module):
 
     def forward(self, input_indices, targets=None):
         batch_size, block_size = input_indices.shape
-        x = self.token_embeddings(input_indices) + self.position_embeddings(torch.arange(block_size, device=input_indices.device))
+        # Use the same device as the model's parameters (avoids MPS "placeholder storage" issues)
+        device = next(self.parameters()).device
+        x = self.token_embeddings(input_indices) + self.position_embeddings(torch.arange(block_size, device=device))
         
         attention_maps = []
         for block in self.blocks:

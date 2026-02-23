@@ -4,7 +4,8 @@ import os
 
 class SimpleTokenizer:
     """
-    A simple tokenizer class that builds a vocabulary from the given text and encodes/decodes text into indices.
+    A simple tokenizer class that builds a vocabulary from the given text and
+    encodes/decodes text into indices.
     """
 
     def __init__(self, text):

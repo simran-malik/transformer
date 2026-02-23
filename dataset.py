@@ -2,7 +2,6 @@ import os
 from torch.utils.data import Dataset
 import torch
 
-
 class SpeechesClassificationDataset(Dataset):
     """
     Dataset class for text classification task.
@@ -40,9 +39,6 @@ class SpeechesClassificationDataset(Dataset):
         label_tensor = torch.tensor(label, dtype=torch.long)
         
         return input_ids, label_tensor
-    
-    
-
 
 class LanguageModelingDataset(torch.utils.data.Dataset):
     """

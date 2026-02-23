@@ -16,7 +16,11 @@ def get_sparse_attention_mask(block_size, sparse_type="local", window_size=4, bl
         
     return mask
 
-class MultiHeadAttention_Sparse(nn.Module):
+class SparseMultiHeadAttention(nn.Module):
+    """
+    Multi-head self-attention with a sparse mask. Restricts each token to attend only within a local window
+    (sparse_type="local") or other patterns, reducing complexity vs full attention.
+    """
     def __init__(self, model_dim, num_heads, block_size, sparse_type="local", window_size=4, block_size_attn=4):
         super().__init__()
         assert model_dim % num_heads == 0, "model_dim must be divisible by num_heads"
@@ -70,15 +74,21 @@ class MultiHeadAttention_Sparse(nn.Module):
 
         return output, weights
 
-class EncoderBlock_Sparse(nn.Module):
+class SparseEncoderBlock(nn.Module):
+    """
+    Single encoder layer with sparse attention: LayerNorm -> SparseMultiHeadAttention (residual) ->
+    LayerNorm -> FeedForward (residual). Same structure as EncoderBlock but uses sparse attention.
+    """
     def __init__(self, model_dim, num_heads, block_size, sparse_type="local", window_size=4, block_size_attn=4):
         super().__init__()
         # Layer normalization after self-attention
         self.norm1 = nn.LayerNorm(model_dim)
+
         # Multi-head self attention block with Sparse Attention
-        self.multi_head_self_attention = MultiHeadAttention_Sparse(
+        self.multi_head_self_attention = SparseMultiHeadAttention(
             model_dim, num_heads, block_size, sparse_type, window_size, block_size_attn
         )
+
         # Layer normalization after feedforward layer
         self.norm2 = nn.LayerNorm(model_dim)
 
@@ -110,7 +120,11 @@ class EncoderBlock_Sparse(nn.Module):
 
         return output, [attention_weights]
 
-class Encoder_Sparse(nn.Module):
+class SparseEncoder(nn.Module):
+    """
+    Transformer encoder with sparse (local-window) attention instead of full attention.
+    Same interface as Encoder: token + positional embeddings, stacked SparseEncoderBlocks.
+    """
     def __init__(self, vocab_size, block_size, model_dim, num_layers, num_heads, sparse_type="local", window_size=4, block_size_attn=4):
         super().__init__()
         self.model_dim = model_dim
@@ -123,12 +137,12 @@ class Encoder_Sparse(nn.Module):
 
         # Stack num_layers encoder blocks
         self.blocks = nn.ModuleList([
-            EncoderBlock_Sparse(model_dim, num_heads, block_size, sparse_type, window_size, block_size_attn) 
+            SparseEncoderBlock(model_dim, num_heads, block_size, sparse_type, window_size, block_size_attn) 
             for _ in range(num_layers)
         ])
 
     def forward(self, input_indices):
-        batch_size, seq_len = input_indices.shape
+        _, seq_len = input_indices.shape
 
         token_embeddings = self.token_embeddings(input_indices)
         positions = torch.arange(0, seq_len, dtype=torch.long, device=input_indices.device)
