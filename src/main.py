@@ -15,15 +15,15 @@ from dataset import SpeechesClassificationDataset, LanguageModelingDataset
 
 seed = 42
 
-def train_classifier(EncoderClass, device, **encoder_kwargs):
+def train_classifier(EncoderClass, results_directory, device):
     """
     Train an encoder + classifier for speech-to-president classification (3 classes).
     Supports both standard Encoder and SparseEncoder via the EncoderClass parameter.
 
     Args:
         EncoderClass: The encoder class to instantiate (Encoder or SparseEncoder).
+        results_directory: Subdirectory under ../results/ for attention sanity-check plots (e.g. "encoder", "sparse_encoder").
         device: torch device (cuda or cpu) for training.
-        **encoder_kwargs: Optional keyword args passed to the encoder constructor (e.g. sparse_type, window_size).
     """
     # Hyperparameters for encoder initialization
     batch_size = 16  # Number of independent sequences we will process in parallel
@@ -41,19 +41,19 @@ def train_classifier(EncoderClass, device, **encoder_kwargs):
     learning_rate = 1e-3  # Learning rate for the optimizer
     epochs = 15 # epochs for classifier training
 
-    tokenizer = load_tokenizer("speechesdataset")
+    tokenizer = load_tokenizer("../speechesdataset")
 
-    train_CLS_dataset = SpeechesClassificationDataset(tokenizer, "speechesdataset/train_CLS.tsv")
+    train_CLS_dataset = SpeechesClassificationDataset(tokenizer, "../speechesdataset/train_CLS.tsv")
     train_CLS_loader = DataLoader(train_CLS_dataset, batch_size=batch_size, collate_fn=partial(collate_batch, block_size=block_size), shuffle=True)
-    test_CLS_dataset = SpeechesClassificationDataset(tokenizer, "speechesdataset/test_CLS.tsv")
+    test_CLS_dataset = SpeechesClassificationDataset(tokenizer, "../speechesdataset/test_CLS.tsv")
     test_CLS_loader = DataLoader(test_CLS_dataset, batch_size=batch_size, collate_fn=partial(collate_batch, block_size=block_size), shuffle=True)
     
-    encoder = EncoderClass(tokenizer.vocab_size, block_size, n_embd, n_layers, n_heads,**encoder_kwargs)
+    encoder = EncoderClass(tokenizer.vocab_size, block_size, n_embd, n_layers, n_heads)
     classifier = Classifier(n_input, n_hidden, n_output)
     total_params = sum(p.numel() for p in encoder.parameters()) + sum(p.numel() for p in classifier.parameters())
     print(f"Total parameters of encoder + classifier: {total_params}")
     
-    run_sanity_check(block_size, tokenizer, encoder, "results/encoder", "encoder_pre_training")
+    run_sanity_check(block_size, tokenizer, encoder, f"../results/{results_directory}", "encoder_pre_training")
 
     encoder, classifier = run_encoder_training(
         encoder=encoder, 
@@ -69,7 +69,7 @@ def train_classifier(EncoderClass, device, **encoder_kwargs):
 
     print(f"Final Test Accuracy: {compute_classifier_accuracy(encoder, classifier, test_CLS_loader, device):.2f}%")
 
-    run_sanity_check(block_size, tokenizer, encoder, "results/encoder", "encoder_post_training")
+    run_sanity_check(block_size, tokenizer, encoder, f"../results/{results_directory}", "encoder_post_training")
 
 def train_decoder(device):
     """
@@ -92,13 +92,13 @@ def train_decoder(device):
     max_epochs = 500 # For language modeling, we can process all the batches for the entire dataset, but that takes a while, so we'll limit it to 500 iterations. For batch size of 16 and block size of  32, this is roughly, this is  500 * 16 * 32 = 256000 tokens, SOTA LMs are trained on trillions of tokens, so this is a very small dataset.
 
     train_text, obama_test_text, wbush_test_text, hbush_test_text = load_individual_texts(
-        "speechesdataset/train_LM.txt", 
-        "speechesdataset/test_LM_obama.txt", 
-        "speechesdataset/test_LM_wbush.txt", 
-        "speechesdataset/test_LM_hbush.txt"
+        "../speechesdataset/train_LM.txt", 
+        "../speechesdataset/test_LM_obama.txt", 
+        "../speechesdataset/test_LM_wbush.txt", 
+        "../speechesdataset/test_LM_hbush.txt"
     )
 
-    tokenizer = load_tokenizer("speechesdataset")
+    tokenizer = load_tokenizer("../speechesdataset")
     train_dataset = LanguageModelingDataset(tokenizer, train_text,  block_size)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_obama_dataset = LanguageModelingDataset(tokenizer, obama_test_text,  block_size)
@@ -111,7 +111,7 @@ def train_decoder(device):
     decoder = Decoder(tokenizer.vocab_size, block_size, n_embd, n_layers, n_heads)
     print(f"Total parameters of Decoder: {sum(p.numel() for p in decoder.parameters())}")
 
-    run_sanity_check(block_size, tokenizer, decoder, "results/decoder", "decoder_pre_training")
+    run_sanity_check(block_size, tokenizer, decoder, "../results/decoder", "decoder_pre_training")
 
     decoder = run_decoder_training(
         decoder=decoder, 
@@ -129,7 +129,7 @@ def train_decoder(device):
     print(f"W Bush: Test Perplexity: {wbush_perplexity:.2f}")
     print(f"H Bush: Test Perplexity: {hbush_perplexity:.2f}")
 
-    run_sanity_check(block_size, tokenizer, decoder, "results/decoder", "decoder_post_training")
+    run_sanity_check(block_size, tokenizer, decoder, "../results/decoder", "decoder_post_training")
 
 def run_encoder_training(encoder, classifier, optimizer, loss_function, data_loader, device, epochs=15):
     """
@@ -218,7 +218,7 @@ def run_decoder_training(decoder, optimizer, train_data_loader, device, max_epoc
         # Periodically evaluate perplexity
         if i == max_epochs - 1 or (i + 1) % eval_epochs == 0:
             train_perplexity = compute_perplexity(decoder, train_data_loader, device, eval_epochs)
-            print(f"Iteration {i + 1:03d} | Train Loss: {loss.item():.4f} | Perplexity: {train_perplexity:.2f}")
+            print(f"Epoch {i + 1:03d} | Train Loss: {loss.item():.4f} | Perplexity: {train_perplexity:.2f}")
 
     return decoder
 
@@ -392,7 +392,7 @@ def main():
 
     if args.task == 'classify':
         print("\nRunning Classification Task: Classify given speech as belonging to one of 3 presidents")
-        train_classifier(Encoder, device)
+        train_classifier(Encoder, results_directory="encoder", device=device)
 
     elif args.task == 'generate':
         print("\nRunning Language Modeling")
@@ -400,7 +400,7 @@ def main():
 
     elif args.task == "sparse":
         print("\nRunning Classification Task using Sparse Encoder")
-        train_classifier(SparseEncoder, device)
+        train_classifier(SparseEncoder, results_directory="sparse_encoder", device=device)
 
 if __name__ == "__main__":
     main()
