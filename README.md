@@ -5,7 +5,6 @@ Uses presidential speech data for classification (3-way speaker prediction) and 
 ## Directory Structure
 
 ```
-
 src/                      # Source code
 │   ├── main.py           # Main entry point: classify, generate, sparse
 │   ├── transformer.py    # Encoder, Decoder, Classifier; full and causal multi-head attention
