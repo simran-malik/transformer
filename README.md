@@ -1,4 +1,4 @@
-# Transformer Architecture
+# Exploring Transformer Architecture
 
 Uses presidential speech data for classification (3-way speaker prediction) and language modeling tasks.
 
